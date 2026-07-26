@@ -61,6 +61,67 @@ model UnitMembership {
   @@index([unitId])
 }
 
+// ===== Master Data Akademik (PRD Modul 2 — Phase 1) =====
+
+model AcademicYear {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  unitId    String   @db.Uuid
+  // Format "2026/2027" — kolom tahunAjaran disiapkan sejak awal di tabel
+  // volume tinggi (presensi Phase 4) untuk siap-partisi RANGE (§4.4).
+  label     String
+  startsOn  DateTime @db.Date
+  endsOn    DateTime @db.Date
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  classrooms Classroom[]
+
+  @@unique([unitId, label])
+  @@index([unitId, isActive])
+}
+
+model Classroom {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  unitId         String   @db.Uuid
+  academicYearId String   @db.Uuid
+  // "7A", "XII IPA 1" — tingkat dipisah supaya query per tingkat tidak parse string.
+  grade          Int
+  name           String
+  createdAt      DateTime @default(now())
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+  students     Student[]
+
+  @@unique([unitId, academicYearId, name])
+  @@index([unitId, grade])
+}
+
+model Subject {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  unitId    String   @db.Uuid
+  code      String // "MTK", "IPA" — stabil, dipakai rate konversi HRIS (§7.7)
+  name      String
+  createdAt DateTime @default(now())
+
+  @@unique([unitId, code])
+  @@index([unitId])
+}
+
+model Student {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  unitId      String    @db.Uuid
+  classroomId String?   @db.Uuid
+  nis         String // nomor induk siswa — unik per unit
+  fullName    String
+  userId      String?   @unique @db.Uuid // akun login siswa (di-provision terpisah)
+  createdAt   DateTime  @default(now())
+
+  classroom Classroom? @relation(fields: [classroomId], references: [id])
+
+  @@unique([unitId, nis])
+  @@index([unitId, classroomId])
+}
+
 // ===== Ledger (AGENTS.md §5.1 — journal-based double-entry) =====
 
 enum JournalSource {

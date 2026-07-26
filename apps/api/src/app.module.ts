@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { AllExceptionsFilter } from './core/all-exceptions.filter';
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { validateEnv } from './core/config';
 import { JwtAuthGuard } from './core/auth/jwt-auth.guard';
 import { UnitContextInterceptor } from './core/unit-context.interceptor';
 import { PrismaService } from './core/prisma.service';
+import { AcademicModule } from './modules/academic/academic.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { PaymentModule } from './modules/payment/payment.module';
 
@@ -17,6 +19,7 @@ import { PaymentModule } from './modules/payment/payment.module';
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '8h' },
     }),
+    AcademicModule,
     AuthModule,
     PaymentModule,
   ],
@@ -24,6 +27,7 @@ import { PaymentModule } from './modules/payment/payment.module';
     PrismaService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_INTERCEPTOR, useClass: UnitContextInterceptor },
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
   exports: [PrismaService],
 })

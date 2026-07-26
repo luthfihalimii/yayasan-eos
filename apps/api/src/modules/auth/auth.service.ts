@@ -26,13 +26,19 @@ export class AuthService {
   }
 
   /**
-   * Login = satu-satunya lookup User lintas unit yang sah (master data global,
-   * tanpa RLS — AGENTS.md migration note). JWT memuat DAFTAR membership (§4.2).
+   * Login = operasi SYSTEM CONTEXT: terjadi pre-auth, unit context belum ada,
+   * tapi harus baca UnitMembership (ber-RLS fail-closed) justru untuk
+   * MEMBENTUK context. Chicken-and-egg yang sah → sentinel '__ALL__'
+   * eksplisit dalam satu transaksi, sama seperti system worker finansial
+   * (AGENTS.md §4.2). JWT memuat DAFTAR membership (§4.2).
    */
   async login(email: string, password: string): Promise<{ accessToken: string }> {
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-      include: { memberships: { select: { unitId: true } } },
+    const user = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.current_unit_id', '__ALL__', true)`;
+      return tx.user.findUnique({
+        where: { email },
+        include: { memberships: { select: { unitId: true } } },
+      });
     });
     // Verifikasi tetap jalan pada user tak dikenal — anti user-enumeration via timing.
     // Dummy hash dihitung sekali (module-level), bukan per-request.
