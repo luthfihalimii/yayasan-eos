@@ -1,0 +1,15 @@
+{
+  "name": "yayasan-eos",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "api": "npm --workspace apps/api run",
+    "test": "npm --workspace apps/api run test"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

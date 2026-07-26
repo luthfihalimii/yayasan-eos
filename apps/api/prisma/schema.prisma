@@ -1,0 +1,198 @@
+// Yayasan EOS — Phase 1 schema (Ledger + WebhookInbox + Outbox + Unit/User minimal + GatePass)
+// Konvensi: camelCase kolom, uuid(7) PK di tabel append-heavy (AGENTS.md §4.5, §5.1).
+// RLS/REVOKE/trigger zero-sum TIDAK bisa diekspresikan di sini — ada di migration SQL hand-edited (§4.8).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("MIGRATOR_DATABASE_URL")
+}
+
+// ===== Unit & User (minimal untuk foundation — modul akademik menyusul) =====
+
+enum UnitType {
+  SD
+  SMP
+  SMA
+  YAYASAN // unit khusus level yayasan: akun Bank/Clearing/Fee hidup di sini (§5.1)
+}
+
+model Unit {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  type      UnitType
+  name      String
+  createdAt DateTime @default(now())
+
+  memberships UnitMembership[]
+}
+
+enum Role {
+  YAYASAN_ADMIN
+  UNIT_ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+  STAFF
+  SCANNER // device machine role — satu-satunya pemanggil /qr/validate (§5.2)
+}
+
+model User {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  email        String   @unique
+  passwordHash String // Argon2id
+  role         Role
+  createdAt    DateTime @default(now())
+
+  memberships UnitMembership[]
+}
+
+// Guru many-to-many unit (rule §7.8); siswa/TU/staff = 1 baris; JWT bawa daftar ini.
+model UnitMembership {
+  userId String @db.Uuid
+  unitId String @db.Uuid
+
+  user User @relation(fields: [userId], references: [id])
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@id([userId, unitId])
+  @@index([unitId])
+}
+
+// ===== Ledger (AGENTS.md §5.1 — journal-based double-entry) =====
+
+enum JournalSource {
+  DOKU_VA
+  DOKU_QRIS
+  DOKU_SETTLEMENT
+  INTERNAL
+}
+
+enum JournalRefType {
+  LIBRARY_FINE
+  CANTEEN_PAYMENT
+  SPP_PAYMENT
+  TOPUP
+  REVERSAL
+  SETTLEMENT
+  FEE
+  REFUND
+  OPENING_BALANCE
+  MANUAL_ADJUSTMENT
+}
+
+enum AccountOwnerType {
+  STUDENT
+  INTERNAL
+}
+
+model LedgerAccount {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  unitId      String           @db.Uuid
+  ownerType   AccountOwnerType
+  ownerId     String?          @db.Uuid
+  accountCode String? // kode stabil akun INTERNAL ("DOKU_CLEARING", ...); null untuk STUDENT
+  label       String
+  balance     Decimal          @default(0) @db.Decimal(18, 2) // cache saldo EFEKTIF (§5.1)
+  createdAt   DateTime         @default(now())
+
+  entries LedgerEntry[]
+
+  // Hanya melindungi STUDENT (NULL distinct) — akun INTERNAL dijaga partial
+  // unique index (unitId, accountCode) WHERE ownerType='INTERNAL' di migration SQL.
+  @@unique([unitId, ownerType, ownerId])
+  @@index([unitId])
+}
+
+model JournalEntry {
+  id                  String         @id @default(uuid(7)) @db.Uuid
+  unitId              String         @db.Uuid // unit peristiwa; settlement lintas jenjang = unit YAYASAN
+  source              JournalSource
+  refType             JournalRefType
+  refId               String?
+  idempotencyKey      String
+  reversalOfJournalId String?        @db.Uuid
+  createdAt           DateTime       @default(now())
+
+  reversalOf JournalEntry?  @relation("Reversal", fields: [reversalOfJournalId], references: [id])
+  reversals  JournalEntry[] @relation("Reversal")
+  entries    LedgerEntry[]
+
+  @@unique([source, idempotencyKey])
+  @@index([unitId, createdAt])
+  @@index([refType, refId])
+}
+
+model LedgerEntry {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  journalId String   @db.Uuid
+  unitId    String   @db.Uuid // = account.unitId (BUKAN journal.unitId — kaki lintas unit ikut akunnya)
+  accountId String   @db.Uuid
+  amount    Decimal  @db.Decimal(18, 2) // SIGNED: + debit, − kredit. CHECK (amount <> 0) di migration.
+  createdAt DateTime @default(now())
+
+  journal JournalEntry  @relation(fields: [journalId], references: [id])
+  account LedgerAccount @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, createdAt])
+  @@index([unitId, createdAt])
+}
+
+// ===== Webhook inbox (§5.1 — non-partisi, key bisnis unik, insert-first) =====
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+}
+
+model WebhookInbox {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  channel     JournalSource // DOKU_VA | DOKU_QRIS
+  businessKey String // nomor invoice/VA + amount — BUKAN Request-Id (bisa berganti per retry)
+  rawPayload  Json
+  signature   String
+  status      WebhookStatus @default(RECEIVED)
+  journalId   String?       @db.Uuid
+  receivedAt  DateTime      @default(now())
+  processedAt DateTime?
+
+  @@unique([channel, businessKey])
+  @@index([status, receivedAt]) // re-processor menyapu RECEIVED/FAILED menua
+}
+
+// ===== Transactional outbox (§4.3) =====
+
+model OutboxEvent {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  topic       String
+  payload     Json // wajib mengandung unitId + idempotencyKey untuk event penulis-Ledger
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+
+  @@index([publishedAt, createdAt]) // relay poll baris publishedAt IS NULL
+}
+
+// ===== Gate pass (§5.2 — Postgres, BUKAN Redis: audit + survive restart) =====
+
+enum GatePassStatus {
+  ISSUED
+  CONSUMED
+  EXPIRED
+}
+
+model GatePass {
+  id         String         @id @default(uuid(7)) @db.Uuid
+  unitId     String         @db.Uuid
+  studentId  String         @db.Uuid
+  token      String         @unique // CSPRNG >= 128 bit
+  status     GatePassStatus @default(ISSUED)
+  issuedBy   String         @db.Uuid
+  issuedAt   DateTime       @default(now())
+  consumedAt DateTime?
+  consumedBy String?        @db.Uuid // scanner device user id
+
+  @@index([unitId, status])
+}
