@@ -1,0 +1,23 @@
+@import 'tailwindcss';
+
+/* Poppins — konsisten semua teks (REQ). Self-host via fontsource menyusul
+   kalau deploy offline-first; sementara Google Fonts cukup untuk admin web. */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+@theme {
+  --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+
+  /* Tema merah-putih Triguna Bhakti */
+  --color-brand-50: #fef2f2;
+  --color-brand-100: #fee2e2;
+  --color-brand-200: #fecaca;
+  --color-brand-300: #fca5a5;
+  --color-brand-500: #dc2626;
+  --color-brand-600: #b91c1c;
+  --color-brand-700: #991b1b;
+  --color-brand-900: #7f1d1d;
+}
+
+html {
+  font-family: var(--font-sans);
+}

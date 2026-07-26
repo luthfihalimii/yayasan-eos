@@ -1,0 +1,81 @@
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import { TOKEN_COOKIE } from '../lib/api';
+
+const API_URL = import.meta.env.API_URL ?? 'http://127.0.0.1:3000';
+let error: string | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const email = String(form.get('email') ?? '').toLowerCase();
+  const password = String(form.get('password') ?? '');
+
+  // Validasi domain di sisi web juga — feedback cepat; API tetap menolak (source of truth).
+  if (!email.endsWith('@trigunabhakti.or.id')) {
+    error = 'Email wajib menggunakan domain @trigunabhakti.or.id';
+  } else {
+    const res = await fetch(`${API_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (res.ok) {
+      const { accessToken } = (await res.json()) as { accessToken: string };
+      Astro.cookies.set(TOKEN_COOKIE, accessToken, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: import.meta.env.PROD,
+        path: '/',
+        maxAge: 60 * 60 * 8, // selaras expiry JWT 8h
+      });
+      return Astro.redirect('/');
+    }
+    error = res.status === 401 ? 'Email atau password salah.' : 'Terjadi kesalahan. Coba lagi.';
+  }
+}
+---
+
+<AuthLayout title="Masuk">
+  <h1 class="text-3xl font-bold text-neutral-900">Selamat datang kembali</h1>
+  <p class="mt-2 text-sm text-neutral-500">Masuk ke dashboard administrasi Yayasan EOS.</p>
+
+  {error && <div class="mt-6 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-700">{error}</div>}
+
+  <form method="post" class="mt-8 space-y-5">
+    <label class="block">
+      <span class="mb-1.5 block text-sm font-medium text-neutral-700">Email</span>
+      <input
+        type="email"
+        name="email"
+        required
+        placeholder="nama@trigunabhakti.or.id"
+        pattern=".+@trigunabhakti\.or\.id"
+        title="Gunakan email @trigunabhakti.or.id"
+        class="w-full rounded-lg border border-neutral-300 px-4 py-2.5 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+      />
+    </label>
+    <label class="block">
+      <span class="mb-1.5 block text-sm font-medium text-neutral-700">Password</span>
+      <input
+        type="password"
+        name="password"
+        required
+        placeholder="••••••••"
+        class="w-full rounded-lg border border-neutral-300 px-4 py-2.5 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+      />
+    </label>
+    <div class="text-right">
+      <a href="/forgot-password" class="text-sm font-semibold text-brand-600 hover:text-brand-700">Lupa password?</a>
+    </div>
+    <button
+      type="submit"
+      class="w-full rounded-full bg-brand-600 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 focus:ring-4 focus:ring-brand-200"
+    >
+      Masuk
+    </button>
+  </form>
+
+  <p class="mt-8 text-center text-xs text-neutral-400">
+    Khusus akun internal Yayasan Triguna Bhakti (@trigunabhakti.or.id)
+  </p>
+</AuthLayout>

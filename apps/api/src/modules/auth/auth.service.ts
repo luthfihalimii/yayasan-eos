@@ -53,4 +53,26 @@ export class AuthService {
     };
     return { accessToken: await this.jwt.signAsync(claims) };
   }
+
+  /** Profil ringkas + daftar unit membership (nama unit untuk switcher web). */
+  async me(userId: string) {
+    const user = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.current_unit_id', '__ALL__', true)`;
+      return tx.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          memberships: { select: { unit: { select: { id: true, type: true, name: true } } } },
+        },
+      });
+    });
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      units: user.memberships.map((m) => m.unit),
+    };
+  }
 }

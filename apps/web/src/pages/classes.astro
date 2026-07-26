@@ -1,0 +1,102 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import { api, ApiError, getMe, resolveActiveUnit } from '../lib/api';
+
+const me = await getMe(Astro.cookies);
+if (!me) return Astro.redirect('/login');
+const activeUnitId = resolveActiveUnit(Astro.cookies, me);
+if (!activeUnitId) return Astro.redirect('/login');
+
+interface Year { id: string; label: string; isActive: boolean }
+interface Classroom { id: string; academicYearId: string; grade: number; name: string }
+
+let formError: string | null = null;
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  try {
+    await api(Astro.cookies, '/academic/classrooms', {
+      method: 'POST',
+      unitId: activeUnitId,
+      body: JSON.stringify({
+        academicYearId: String(form.get('academicYearId') ?? ''),
+        grade: Number(form.get('grade') ?? 0),
+        name: String(form.get('name') ?? ''),
+      }),
+    });
+    return Astro.redirect('/classes');
+  } catch (e) {
+    formError =
+      e instanceof ApiError && e.status === 409
+        ? 'Nama kelas sudah ada di tahun ajaran itu.'
+        : e instanceof ApiError && e.status === 404
+          ? 'Tahun ajaran tidak ditemukan.'
+          : 'Data tidak valid.';
+  }
+}
+
+const [classrooms, years] = await Promise.all([
+  api<Classroom[]>(Astro.cookies, '/academic/classrooms', { unitId: activeUnitId }).catch(() => [] as Classroom[]),
+  api<Year[]>(Astro.cookies, '/academic/years', { unitId: activeUnitId }).catch(() => [] as Year[]),
+]);
+const yearById = new Map(years.map((y) => [y.id, y]));
+---
+
+<DashboardLayout title="Kelas" me={me} activeUnitId={activeUnitId} active="classes">
+  <div class="flex items-start justify-between">
+    <div>
+      <h2 class="text-2xl font-bold text-neutral-900">Kelas</h2>
+      <p class="mt-1 text-sm text-neutral-500">Rombongan belajar per tahun ajaran.</p>
+    </div>
+    <button type="button" onclick="document.getElementById('add-class').showModal()" class="rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">+ Tambah</button>
+  </div>
+
+  {formError && <div class="mt-6 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-700">{formError}</div>}
+
+  <div class="mt-6 rounded-xl border border-neutral-200 bg-white">
+    <table class="w-full text-left text-sm">
+      <thead>
+        <tr class="border-b border-neutral-200 text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+          <th class="px-5 py-3">Nama</th>
+          <th class="px-5 py-3">Tingkat</th>
+          <th class="px-5 py-3">Tahun Ajaran</th>
+        </tr>
+      </thead>
+      <tbody>
+        {classrooms.length === 0 && <tr><td colspan="3" class="px-5 py-10 text-center text-neutral-400">Belum ada kelas.</td></tr>}
+        {classrooms.map((c) => (
+          <tr class="border-b border-neutral-100 hover:bg-neutral-50">
+            <td class="px-5 py-3.5 font-semibold text-neutral-900">{c.name}</td>
+            <td class="px-5 py-3.5 text-neutral-600">Tingkat {c.grade}</td>
+            <td class="px-5 py-3.5 text-neutral-600">{yearById.get(c.academicYearId)?.label ?? '—'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  <dialog id="add-class" class="m-auto w-full max-w-md rounded-2xl p-0 backdrop:bg-black/40">
+    <form method="post" class="p-6">
+      <h3 class="text-lg font-bold text-neutral-900">Tambah Kelas</h3>
+      <div class="mt-5 space-y-4">
+        <label class="block">
+          <span class="mb-1.5 block text-sm font-medium text-neutral-700">Tahun Ajaran</span>
+          <select name="academicYearId" required class="w-full rounded-lg border border-neutral-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500">
+            {years.map((y) => <option value={y.id} selected={y.isActive}>{y.label}{y.isActive ? ' (aktif)' : ''}</option>)}
+          </select>
+        </label>
+        <label class="block">
+          <span class="mb-1.5 block text-sm font-medium text-neutral-700">Tingkat</span>
+          <input type="number" name="grade" required min="1" max="12" class="w-full rounded-lg border border-neutral-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+        </label>
+        <label class="block">
+          <span class="mb-1.5 block text-sm font-medium text-neutral-700">Nama Kelas</span>
+          <input name="name" required maxlength="32" placeholder="7A" class="w-full rounded-lg border border-neutral-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+        </label>
+      </div>
+      <div class="mt-6 flex justify-end gap-3">
+        <button type="button" onclick="this.closest('dialog').close()" class="rounded-full border border-neutral-300 px-5 py-2 text-sm font-semibold text-neutral-600">Batal</button>
+        <button type="submit" class="rounded-full bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700">Simpan</button>
+      </div>
+    </form>
+  </dialog>
+</DashboardLayout>

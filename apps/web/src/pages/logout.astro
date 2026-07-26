@@ -1,0 +1,9 @@
+---
+import { TOKEN_COOKIE, UNIT_COOKIE } from '../lib/api';
+
+if (Astro.request.method === 'POST') {
+  Astro.cookies.delete(TOKEN_COOKIE, { path: '/' });
+  Astro.cookies.delete(UNIT_COOKIE, { path: '/' });
+}
+return Astro.redirect('/login');
+---

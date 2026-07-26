@@ -12,7 +12,7 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
-  const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@eos.local';
+  const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@trigunabhakti.or.id';
   const adminPassword = process.env.SEED_ADMIN_PASSWORD;
   if (!adminPassword || adminPassword.length < 12) {
     throw new Error('SEED_ADMIN_PASSWORD wajib di-set (>= 12 karakter) — tidak ada default.');

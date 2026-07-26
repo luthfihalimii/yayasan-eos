@@ -1,0 +1,155 @@
+---
+// Halaman Siswa (desain ref: stat cards + toolbar + tabel + add).
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import { api, ApiError, getMe, resolveActiveUnit } from '../lib/api';
+
+const me = await getMe(Astro.cookies);
+if (!me) return Astro.redirect('/login');
+const activeUnitId = resolveActiveUnit(Astro.cookies, me);
+if (!activeUnitId) return Astro.redirect('/login');
+
+interface Classroom { id: string; grade: number; name: string }
+interface Student { id: string; nis: string; fullName: string; classroomId: string | null }
+
+let formError: string | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  try {
+    await api(Astro.cookies, '/academic/students', {
+      method: 'POST',
+      unitId: activeUnitId,
+      body: JSON.stringify({
+        nis: String(form.get('nis') ?? ''),
+        fullName: String(form.get('fullName') ?? ''),
+        classroomId: form.get('classroomId') ? String(form.get('classroomId')) : undefined,
+      }),
+    });
+    return Astro.redirect('/students');
+  } catch (e) {
+    formError =
+      e instanceof ApiError && e.status === 409
+        ? 'NIS sudah terdaftar di unit ini.'
+        : e instanceof ApiError && e.status === 403
+          ? 'Role Anda tidak berwenang menambah siswa.'
+          : 'Data tidak valid. Periksa kembali.';
+  }
+}
+
+const [students, classrooms] = await Promise.all([
+  api<Student[]>(Astro.cookies, '/academic/students', { unitId: activeUnitId }).catch(() => [] as Student[]),
+  api<Classroom[]>(Astro.cookies, '/academic/classrooms', { unitId: activeUnitId }).catch(() => [] as Classroom[]),
+]);
+const classById = new Map(classrooms.map((c) => [c.id, c]));
+const q = Astro.url.searchParams.get('q')?.toLowerCase() ?? '';
+const filtered = q
+  ? students.filter((s) => s.fullName.toLowerCase().includes(q) || s.nis.includes(q))
+  : students;
+---
+
+<DashboardLayout title="Siswa" me={me} activeUnitId={activeUnitId} active="students">
+  <div class="flex items-start justify-between">
+    <div>
+      <h2 class="text-2xl font-bold text-neutral-900">Data Siswa</h2>
+      <p class="mt-1 text-sm text-neutral-500">Kelola siswa unit aktif.</p>
+    </div>
+    <button
+      type="button"
+      onclick="document.getElementById('add-student').showModal()"
+      class="rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700"
+    >
+      + Tambah Siswa
+    </button>
+  </div>
+
+  <div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+    <div class="rounded-xl border border-neutral-200 bg-white p-5">
+      <p class="text-sm font-medium text-neutral-500">Total Siswa</p>
+      <p class="mt-2 text-3xl font-bold text-neutral-900">{students.length}</p>
+    </div>
+    <div class="rounded-xl border border-neutral-200 bg-white p-5">
+      <p class="text-sm font-medium text-neutral-500">Sudah Punya Kelas</p>
+      <p class="mt-2 text-3xl font-bold text-neutral-900">{students.filter((s) => s.classroomId).length}</p>
+    </div>
+    <div class="rounded-xl border border-neutral-200 bg-white p-5">
+      <p class="text-sm font-medium text-neutral-500">Belum Punya Kelas</p>
+      <p class="mt-2 text-3xl font-bold text-brand-600">{students.filter((s) => !s.classroomId).length}</p>
+    </div>
+  </div>
+
+  {formError && (
+    <div class="mt-6 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-700">{formError}</div>
+  )}
+
+  <div class="mt-6 rounded-xl border border-neutral-200 bg-white">
+    <form method="get" class="flex items-center gap-3 border-b border-neutral-200 p-4">
+      <input
+        type="search"
+        name="q"
+        value={q}
+        placeholder="Cari nama atau NIS…"
+        class="w-72 rounded-lg border border-neutral-300 px-4 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+      />
+      <button class="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-600 hover:border-brand-300 hover:text-brand-700">Cari</button>
+      {q && <a href="/students" class="text-sm text-neutral-400 hover:text-neutral-600">Reset</a>}
+    </form>
+
+    <table class="w-full text-left text-sm">
+      <thead>
+        <tr class="border-b border-neutral-200 text-xs font-semibold tracking-wide text-neutral-400 uppercase">
+          <th class="px-5 py-3">NIS</th>
+          <th class="px-5 py-3">Nama Lengkap</th>
+          <th class="px-5 py-3">Kelas</th>
+        </tr>
+      </thead>
+      <tbody>
+        {filtered.length === 0 && (
+          <tr><td colspan="3" class="px-5 py-10 text-center text-neutral-400">Belum ada data siswa.</td></tr>
+        )}
+        {filtered.map((s) => {
+          const cls = s.classroomId ? classById.get(s.classroomId) : null;
+          return (
+            <tr class="border-b border-neutral-100 transition hover:bg-neutral-50">
+              <td class="px-5 py-3.5 font-medium text-neutral-700">{s.nis}</td>
+              <td class="px-5 py-3.5 font-semibold text-neutral-900">{s.fullName}</td>
+              <td class="px-5 py-3.5">
+                {cls ? (
+                  <span class="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">{cls.name}</span>
+                ) : (
+                  <span class="text-xs text-neutral-400">—</span>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+
+  <dialog id="add-student" class="m-auto w-full max-w-md rounded-2xl p-0 backdrop:bg-black/40">
+    <form method="post" class="p-6">
+      <h3 class="text-lg font-bold text-neutral-900">Tambah Siswa</h3>
+      <div class="mt-5 space-y-4">
+        <label class="block">
+          <span class="mb-1.5 block text-sm font-medium text-neutral-700">NIS</span>
+          <input name="nis" required maxlength="32" class="w-full rounded-lg border border-neutral-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+        </label>
+        <label class="block">
+          <span class="mb-1.5 block text-sm font-medium text-neutral-700">Nama Lengkap</span>
+          <input name="fullName" required maxlength="256" class="w-full rounded-lg border border-neutral-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+        </label>
+        <label class="block">
+          <span class="mb-1.5 block text-sm font-medium text-neutral-700">Kelas (opsional)</span>
+          <select name="classroomId" class="w-full rounded-lg border border-neutral-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500">
+            <option value="">— Belum ditentukan —</option>
+            {classrooms.map((c) => <option value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+      </div>
+      <div class="mt-6 flex justify-end gap-3">
+        <button type="button" onclick="this.closest('dialog').close()" class="rounded-full border border-neutral-300 px-5 py-2 text-sm font-semibold text-neutral-600">Batal</button>
+        <button type="submit" class="rounded-full bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700">Simpan</button>
+      </div>
+    </form>
+  </dialog>
+</DashboardLayout>

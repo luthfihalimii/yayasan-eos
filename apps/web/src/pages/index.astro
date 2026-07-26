@@ -1,0 +1,64 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import { api, getMe, resolveActiveUnit } from '../lib/api';
+
+const me = await getMe(Astro.cookies);
+if (!me) return Astro.redirect('/login');
+const activeUnitId = resolveActiveUnit(Astro.cookies, me);
+if (!activeUnitId) return Astro.redirect('/login');
+
+interface Student { id: string }
+interface Classroom { id: string }
+interface Year { id: string; label: string; isActive: boolean }
+
+let students: Student[] = [];
+let classrooms: Classroom[] = [];
+let years: Year[] = [];
+let loadError = false;
+try {
+  [students, classrooms, years] = await Promise.all([
+    api<Student[]>(Astro.cookies, '/academic/students', { unitId: activeUnitId }),
+    api<Classroom[]>(Astro.cookies, '/academic/classrooms', { unitId: activeUnitId }),
+    api<Year[]>(Astro.cookies, '/academic/years', { unitId: activeUnitId }),
+  ]);
+} catch {
+  loadError = true; // role tanpa akses master data tetap bisa lihat dashboard kosong
+}
+const activeYear = years.find((y) => y.isActive);
+
+const stats = [
+  { label: 'Total Siswa', value: students.length, note: 'terdaftar di unit ini' },
+  { label: 'Jumlah Kelas', value: classrooms.length, note: 'semua tingkat' },
+  { label: 'Tahun Ajaran Aktif', value: activeYear?.label ?? '—', note: activeYear ? 'sedang berjalan' : 'belum diaktifkan' },
+];
+---
+
+<DashboardLayout title="Dashboard" me={me} activeUnitId={activeUnitId} active="dashboard">
+  <h2 class="text-2xl font-bold text-neutral-900">Ringkasan Unit</h2>
+  <p class="mt-1 text-sm text-neutral-500">Data master unit aktif.</p>
+
+  {loadError && (
+    <div class="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+      Sebagian data tidak dapat dimuat untuk role ini.
+    </div>
+  )}
+
+  <div class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+    {stats.map((s) => (
+      <div class="rounded-xl border border-neutral-200 bg-white p-5">
+        <p class="text-sm font-medium text-neutral-500">{s.label}</p>
+        <p class="mt-2 text-3xl font-bold text-neutral-900">{s.value}</p>
+        <p class="mt-1 text-xs text-neutral-400">{s.note}</p>
+      </div>
+    ))}
+  </div>
+
+  <div class="mt-8 rounded-xl border border-neutral-200 bg-white p-6">
+    <h3 class="font-semibold text-neutral-900">Mulai cepat</h3>
+    <div class="mt-4 flex flex-wrap gap-3">
+      <a href="/students" class="rounded-full bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700">Kelola Siswa</a>
+      <a href="/years" class="rounded-full border border-neutral-300 px-5 py-2.5 text-sm font-semibold text-neutral-700 transition hover:border-brand-300 hover:text-brand-700">Tahun Ajaran</a>
+      <a href="/classes" class="rounded-full border border-neutral-300 px-5 py-2.5 text-sm font-semibold text-neutral-700 transition hover:border-brand-300 hover:text-brand-700">Kelas</a>
+    </div>
+  </div>
+</DashboardLayout>

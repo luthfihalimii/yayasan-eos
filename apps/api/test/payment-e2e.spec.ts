@@ -43,7 +43,7 @@ beforeEach(async () => {
   studentAccountId = student.id;
   await mig.user.create({
     data: {
-      email: 'tu@eos.sch.id',
+      email: 'tu@trigunabhakti.or.id',
       passwordHash: await AuthService.hashPassword('rahasia123'),
       role: 'UNIT_ADMIN',
       memberships: { create: { unitId: smp.id } },
@@ -76,7 +76,7 @@ describe('E2E: auth + webhook DOKU → Ledger', () => {
     const ok = await fetch(`${baseUrl}/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: 'tu@eos.sch.id', password: 'rahasia123' }),
+      body: JSON.stringify({ email: 'tu@trigunabhakti.or.id', password: 'rahasia123' }),
     });
     expect(ok.status).toBe(201);
     const { accessToken } = (await ok.json()) as { accessToken: string };
@@ -85,7 +85,7 @@ describe('E2E: auth + webhook DOKU → Ledger', () => {
     const bad = await fetch(`${baseUrl}/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: 'tu@eos.sch.id', password: 'salah' }),
+      body: JSON.stringify({ email: 'tu@trigunabhakti.or.id', password: 'salah' }),
     });
     expect(bad.status).toBe(401);
   });
@@ -144,5 +144,46 @@ describe('E2E: auth + webhook DOKU → Ledger', () => {
   it('endpoint terproteksi tanpa token → 401', async () => {
     const res = await fetch(`${baseUrl}/`, { method: 'GET' });
     expect([401, 404]).toContain(res.status); // guard menolak sebelum routing 404
+  });
+
+  it('login email di luar domain @trigunabhakti.or.id → 400, tidak menyentuh verifikasi', async () => {
+    const res = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'siapa@gmail.com', password: 'rahasia123' }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { issues: { message: string }[] };
+    expect(body.issues[0].message).toContain('@trigunabhakti.or.id');
+  });
+
+  it('forgot-password: respons identik untuk email terdaftar & tidak (anti-enumeration)', async () => {
+    const post = (email: string) =>
+      fetch(`${baseUrl}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+    const a = await post('tu@trigunabhakti.or.id'); // terdaftar
+    const b = await post('hantu@trigunabhakti.or.id'); // tidak terdaftar
+    expect(a.status).toBe(b.status);
+    expect(await a.text()).toBe(await b.text());
+  });
+
+  it('GET /auth/me mengembalikan profil + units untuk switcher', async () => {
+    const login = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'tu@trigunabhakti.or.id', password: 'rahasia123' }),
+    });
+    const { accessToken } = (await login.json()) as { accessToken: string };
+    const res = await fetch(`${baseUrl}/auth/me`, {
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    expect(res.status).toBe(200);
+    const me = (await res.json()) as { email: string; units: { type: string }[] };
+    expect(me.email).toBe('tu@trigunabhakti.or.id');
+    expect(me.units).toHaveLength(1);
+    expect(me.units[0].type).toBe('SMP');
   });
 });

@@ -1,0 +1,43 @@
+---
+// Split-screen auth (desain ref: panel kiri foto+quote, kanan form).
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} — Yayasan EOS</title>
+  </head>
+  <body class="min-h-screen bg-neutral-100 p-4 md:p-8">
+    <div class="mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl overflow-hidden rounded-2xl bg-white shadow-xl">
+      <!-- Panel kiri — brand -->
+      <aside class="relative hidden w-[42%] flex-col justify-between bg-gradient-to-br from-brand-700 via-brand-600 to-brand-900 p-10 text-white lg:flex">
+        <div class="flex items-center gap-3">
+          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-xl font-bold">TB</div>
+          <span class="text-xl font-semibold tracking-tight">Yayasan EOS</span>
+        </div>
+        <div>
+          <p class="text-2xl leading-snug font-semibold">
+            “Satu sistem untuk seluruh operasional sekolah — akademik, keuangan, sampai kantin.”
+          </p>
+          <p class="mt-6 font-semibold">Yayasan Triguna Bhakti</p>
+          <p class="text-sm text-white/70">SD · SMP · SMA</p>
+        </div>
+      </aside>
+
+      <!-- Panel kanan — form -->
+      <main class="flex flex-1 items-center justify-center p-8 md:p-14">
+        <div class="w-full max-w-md">
+          <slot />
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

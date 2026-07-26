@@ -58,13 +58,13 @@ beforeEach(async () => {
   unitB = b.id;
   const hash = await AuthService.hashPassword('rahasia123');
   await mig.user.create({
-    data: { email: 'tua@eos.sch.id', passwordHash: hash, role: 'UNIT_ADMIN', memberships: { create: { unitId: unitA } } },
+    data: { email: 'tua@trigunabhakti.or.id', passwordHash: hash, role: 'UNIT_ADMIN', memberships: { create: { unitId: unitA } } },
   });
   await mig.user.create({
-    data: { email: 'guru@eos.sch.id', passwordHash: hash, role: 'TEACHER', memberships: { create: { unitId: unitA } } },
+    data: { email: 'guru@trigunabhakti.or.id', passwordHash: hash, role: 'TEACHER', memberships: { create: { unitId: unitA } } },
   });
-  tokenTuA = await login('tua@eos.sch.id');
-  tokenTeacher = await login('guru@eos.sch.id');
+  tokenTuA = await login('tua@trigunabhakti.or.id');
+  tokenTeacher = await login('guru@trigunabhakti.or.id');
 });
 
 describe('E2E: academic master data + isolasi unit', () => {

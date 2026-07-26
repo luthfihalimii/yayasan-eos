@@ -1,0 +1,14 @@
+---
+import { getMe, UNIT_COOKIE } from '../lib/api';
+
+if (Astro.request.method === 'POST') {
+  const me = await getMe(Astro.cookies);
+  const form = await Astro.request.formData();
+  const unitId = String(form.get('unitId') ?? '');
+  // Hanya unit yang benar-benar membership user — jangan percaya form.
+  if (me && me.units.some((u) => u.id === unitId)) {
+    Astro.cookies.set(UNIT_COOKIE, unitId, { httpOnly: true, sameSite: 'lax', path: '/' });
+  }
+}
+return Astro.redirect(Astro.request.headers.get('referer') ?? '/');
+---
