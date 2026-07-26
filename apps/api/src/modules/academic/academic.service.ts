@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../core/prisma.service';
 import { withUnitTx } from '../../core/prisma';
 import { currentUnitContext, MissingUnitContextError } from '../../core/unit-context';
-import { CreateAcademicYear, CreateClassroom, CreateStudent, CreateSubject } from './academic.dto';
+import { CreateAcademicYear, CreateClassroom, CreateStudent, CreateSubject, UpdateStudent } from './academic.dto';
 
 /**
  * Semua akses lewat withUnitTx: RLS + Client-side scoping dari unit context
@@ -91,5 +91,18 @@ export class AcademicService {
         orderBy: { fullName: 'asc' },
       }),
     );
+  }
+
+  updateStudent(id: string, dto: UpdateStudent) {
+    this.activeUnit();
+    return withUnitTx(this.prisma, (tx) =>
+      // RLS: baris unit lain tak terlihat → P2025 → 404 dari exception filter.
+      tx.student.update({ where: { id }, data: dto }),
+    );
+  }
+
+  deleteStudent(id: string) {
+    this.activeUnit();
+    return withUnitTx(this.prisma, (tx) => tx.student.delete({ where: { id } }));
   }
 }

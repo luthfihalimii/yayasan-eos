@@ -15,24 +15,44 @@ let formError: string | null = null;
 
 if (Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
+  const action = String(form.get('_action') ?? 'create');
   try {
-    await api(Astro.cookies, '/academic/students', {
-      method: 'POST',
-      unitId: activeUnitId,
-      body: JSON.stringify({
-        nis: String(form.get('nis') ?? ''),
-        fullName: String(form.get('fullName') ?? ''),
-        classroomId: form.get('classroomId') ? String(form.get('classroomId')) : undefined,
-      }),
-    });
+    if (action === 'delete') {
+      await api(Astro.cookies, `/academic/students/${String(form.get('id'))}`, {
+        method: 'DELETE',
+        unitId: activeUnitId,
+      });
+    } else if (action === 'update') {
+      const classroomRaw = String(form.get('classroomId') ?? '');
+      await api(Astro.cookies, `/academic/students/${String(form.get('id'))}`, {
+        method: 'PATCH',
+        unitId: activeUnitId,
+        body: JSON.stringify({
+          fullName: String(form.get('fullName') ?? ''),
+          classroomId: classroomRaw === '' ? null : classroomRaw,
+        }),
+      });
+    } else {
+      await api(Astro.cookies, '/academic/students', {
+        method: 'POST',
+        unitId: activeUnitId,
+        body: JSON.stringify({
+          nis: String(form.get('nis') ?? ''),
+          fullName: String(form.get('fullName') ?? ''),
+          classroomId: form.get('classroomId') ? String(form.get('classroomId')) : undefined,
+        }),
+      });
+    }
     return Astro.redirect('/students');
   } catch (e) {
     formError =
       e instanceof ApiError && e.status === 409
         ? 'NIS sudah terdaftar di unit ini.'
         : e instanceof ApiError && e.status === 403
-          ? 'Role Anda tidak berwenang menambah siswa.'
-          : 'Data tidak valid. Periksa kembali.';
+          ? 'Role Anda tidak berwenang mengubah data siswa.'
+          : e instanceof ApiError && e.status === 404
+            ? 'Siswa tidak ditemukan.'
+            : 'Data tidak valid. Periksa kembali.';
   }
 }
 
@@ -100,11 +120,12 @@ const filtered = q
           <th class="px-5 py-3">NIS</th>
           <th class="px-5 py-3">Nama Lengkap</th>
           <th class="px-5 py-3">Kelas</th>
+          <th class="px-5 py-3 text-right">Aksi</th>
         </tr>
       </thead>
       <tbody>
         {filtered.length === 0 && (
-          <tr><td colspan="3" class="px-5 py-10 text-center text-neutral-400">Belum ada data siswa.</td></tr>
+          <tr><td colspan="4" class="px-5 py-10 text-center text-neutral-400">Belum ada data siswa.</td></tr>
         )}
         {filtered.map((s) => {
           const cls = s.classroomId ? classById.get(s.classroomId) : null;
@@ -119,12 +140,51 @@ const filtered = q
                   <span class="text-xs text-neutral-400">—</span>
                 )}
               </td>
+              <td class="px-5 py-3.5 text-right whitespace-nowrap">
+                <button
+                  type="button"
+                  class="text-sm font-semibold text-brand-600 hover:text-brand-700"
+                  onclick={`document.getElementById('edit-${s.id}').showModal()`}
+                >Edit</button>
+                <form method="post" class="ml-3 inline" onsubmit="return confirm('Hapus siswa ini? Tindakan tidak bisa dibatalkan.')">
+                  <input type="hidden" name="_action" value="delete" />
+                  <input type="hidden" name="id" value={s.id} />
+                  <button class="text-sm font-semibold text-neutral-400 hover:text-brand-700">Hapus</button>
+                </form>
+              </td>
             </tr>
           );
         })}
       </tbody>
     </table>
   </div>
+
+  {filtered.map((s) => (
+    <dialog id={`edit-${s.id}`} class="m-auto w-full max-w-md rounded-2xl p-0 backdrop:bg-black/40">
+      <form method="post" class="p-6">
+        <h3 class="text-lg font-bold text-neutral-900">Edit Siswa — {s.nis}</h3>
+        <input type="hidden" name="_action" value="update" />
+        <input type="hidden" name="id" value={s.id} />
+        <div class="mt-5 space-y-4">
+          <label class="block">
+            <span class="mb-1.5 block text-sm font-medium text-neutral-700">Nama Lengkap</span>
+            <input name="fullName" required maxlength="256" value={s.fullName} class="w-full rounded-lg border border-neutral-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+          </label>
+          <label class="block">
+            <span class="mb-1.5 block text-sm font-medium text-neutral-700">Kelas</span>
+            <select name="classroomId" class="w-full rounded-lg border border-neutral-300 px-4 py-2.5 text-sm outline-none focus:border-brand-500">
+              <option value="">— Tanpa kelas —</option>
+              {classrooms.map((c) => <option value={c.id} selected={c.id === s.classroomId}>{c.name}</option>)}
+            </select>
+          </label>
+        </div>
+        <div class="mt-6 flex justify-end gap-3">
+          <button type="button" onclick="this.closest('dialog').close()" class="rounded-full border border-neutral-300 px-5 py-2 text-sm font-semibold text-neutral-600">Batal</button>
+          <button type="submit" class="rounded-full bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700">Simpan</button>
+        </div>
+      </form>
+    </dialog>
+  ))}
 
   <dialog id="add-student" class="m-auto w-full max-w-md rounded-2xl p-0 backdrop:bg-black/40">
     <form method="post" class="p-6">

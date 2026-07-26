@@ -44,9 +44,27 @@ model User {
   email        String   @unique
   passwordHash String // Argon2id
   role         Role
+  // MFA TOTP (PRD §5.1 — wajib YAYASAN_ADMIN & bendahara).
+  // Secret dienkripsi AES-256-GCM dengan APP_ENCRYPTION_KEY (bukan plaintext).
+  totpSecretEnc String?
+  totpEnabledAt DateTime?
   createdAt    DateTime @default(now())
 
   memberships UnitMembership[]
+  resetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique // SHA-256 dari token — token mentah tidak pernah disimpan
+  expiresAt DateTime
+  usedAt    DateTime? // single-use
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }
 
 // Guru many-to-many unit (rule §7.8); siswa/TU/staff = 1 baris; JWT bawa daftar ini.

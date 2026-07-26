@@ -9,6 +9,7 @@ export interface Me {
   id: string;
   email: string;
   role: string;
+  mfaEnabled: boolean;
   units: { id: string; type: string; name: string }[];
 }
 

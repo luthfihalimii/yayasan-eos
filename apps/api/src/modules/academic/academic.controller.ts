@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { Roles } from '../../core/auth/decorators';
 import { AcademicService } from './academic.service';
 import {
@@ -6,6 +6,7 @@ import {
   createClassroomSchema,
   createStudentSchema,
   createSubjectSchema,
+  updateStudentSchema,
 } from './academic.dto';
 
 // Master data dikelola TU/Yayasan Admin (PRD Modul 2); read terbuka untuk
@@ -58,5 +59,15 @@ export class AcademicController {
   @Get('students')
   listStudents(@Query('classroomId') classroomId?: string) {
     return this.academic.listStudents(classroomId);
+  }
+
+  @Patch('students/:id')
+  updateStudent(@Param('id') id: string, @Body() body: unknown) {
+    return this.academic.updateStudent(id, updateStudentSchema.parse(body));
+  }
+
+  @Delete('students/:id')
+  deleteStudent(@Param('id') id: string) {
+    return this.academic.deleteStudent(id);
   }
 }

@@ -23,6 +23,12 @@ export const createStudentSchema = z.object({
   classroomId: z.string().uuid().optional(),
 });
 
+export const updateStudentSchema = z.object({
+  fullName: z.string().min(1).max(256).optional(),
+  classroomId: z.string().uuid().nullable().optional(), // null = keluarkan dari kelas
+});
+
+export type UpdateStudent = z.infer<typeof updateStudentSchema>;
 export type CreateAcademicYear = z.infer<typeof createAcademicYearSchema>;
 export type CreateClassroom = z.infer<typeof createClassroomSchema>;
 export type CreateSubject = z.infer<typeof createSubjectSchema>;
