@@ -6,6 +6,8 @@ import { validateEnv } from './core/config';
 import { JwtAuthGuard } from './core/auth/jwt-auth.guard';
 import { UnitContextInterceptor } from './core/unit-context.interceptor';
 import { PrismaService } from './core/prisma.service';
+import { AuthModule } from './modules/auth/auth.module';
+import { PaymentModule } from './modules/payment/payment.module';
 
 @Module({
   imports: [
@@ -15,6 +17,8 @@ import { PrismaService } from './core/prisma.service';
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '8h' },
     }),
+    AuthModule,
+    PaymentModule,
   ],
   providers: [
     PrismaService,
